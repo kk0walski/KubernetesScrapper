@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "databaseworker.fullname" . }}
+  labels:
+    {{- include "databaseworker.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.databaseworker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "databaseworker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.databaseworker.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "databaseworker.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.databaseworker.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: database-worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: [celery, worker, --app=celery_tasks.database.tasks.app, --queue=queueC, -c 10, --loglevel=INFO, --events]
+          envFrom:
+          - configMapRef:
+              name: scrapper-config
+          resources:
+{{- toYaml .Values.databaseworker.resources | nindent 12 }}
+    {{- with .Values.databaseworker.nodeSelector }}
+      nodeSelector:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.databaseworker.affinity }}
+      affinity:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.databaseworker.tolerations }}
+      tolerations:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+

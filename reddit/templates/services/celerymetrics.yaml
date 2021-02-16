@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "celerymetrics.fullname" . }}
+  labels:
+    {{- include "celerymetrics.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.celerymetrics.service.type }}
+  ports:
+    - port: {{ .Values.celerymetrics.service.port }}
+      targetPort: celery-exporter
+      protocol: TCP
+      name: http-metrics-celery
+  selector:
+    {{- include "celerymetrics.selectorLabels" . | nindent 4 }}

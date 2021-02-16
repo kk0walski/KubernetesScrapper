@@ -1,0 +1,278 @@
+{{- $replicaCount := int .Values.mongodb.replicaCount }}
+{{- $portNumber := int .Values.mongodb.service.port }}
+{{- $fullname := .Values.mongodb.fullnameOverride }}
+{{- $releaseNamespace := include "mongodb.namespace" . }}
+{{- $clusterDomain := .Values.mongodb.clusterDomain }}
+{{- $loadBalancerIPListLength := len .Values.mongodb.externalAccess.service.loadBalancerIPs }}
+{{- $mongoList := list }}
+{{- range $e, $i := until $replicaCount }}
+{{- $mongoList = append $mongoList (printf "%s-%d.%s-headless.%s.svc.%s:%d" $fullname $i $fullname $releaseNamespace $clusterDomain $portNumber) }}
+{{- end }}
+
+{{- if and (eq .Values.mongodb.architecture "replicaset") .Values.mongodb.externalAccess.enabled (not .Values.mongodb.externalAccess.autoDiscovery.enabled) (not (eq $replicaCount $loadBalancerIPListLength )) (eq .Values.mongodb.externalAccess.service.type "LoadBalancer") }}
+
+###############################################################################
+### ERROR: You enabled external access to MongoDB nodes without specifying  ###
+###   the array of load balancer IPs for MongoDB nodes.                     ###
+###############################################################################
+
+This deployment will be incomplete until you configure the array of load balancer
+IPs for MongoDB nodes. To complete your deployment follow the steps below:
+
+1. Wait for the load balancer IPs (it may take a few minutes for them to be available):
+
+    kubectl get svc --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ template "mongodb.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=mongodb" -w
+
+2. Obtain the load balancer IPs and upgrade your chart:
+
+    {{- range $e, $i := until $replicaCount }}
+    LOAD_BALANCER_IP_{{ add $i 1 }}="$(kubectl get svc --namespace {{ $releaseNamespace }} {{ $fullname }}-{{ $i }}-external -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
+    {{- end }}
+
+3. Upgrade you chart:
+
+    helm upgrade {{ .Release.Name }} bitnami/{{ .Chart.Name }} \
+      --set mongodb.replicaCount={{ $replicaCount }} \
+      --set mongodb.externalAccess.enabled=true \
+      {{- range $i, $e := until $replicaCount }}
+      --set mongodb.externalAccess.service.loadBalancerIPs[{{ $i }}]=$LOAD_BALANCER_IP_{{ add $i 1 }} \
+      {{- end }}
+      --set mongodb.externalAccess.service.type=LoadBalancer
+
+{{- else }}
+
+{{- if and (or (and (eq .Values.mongodb.architecture "standalone") (or (eq .Values.mongodb.service.type "LoadBalancer") (eq .Values.mongodb.service.type "NodePort"))) (and (eq .Values.mongodb.architecture "replicaset") .Values.mongodb.externalAccess.enabled)) (not .Values.mongodb.auth.enabled) }}
+-------------------------------------------------------------------------------
+ WARNING
+
+    By not enabling "mongodb.auth.enabled" you have most likely exposed the
+    MongoDB service externally without any authentication mechanism.
+
+    For security reasons, we strongly suggest that you enable authentiation
+    setting the "mongodb.auth.enabled" parameter to "true".
+
+-------------------------------------------------------------------------------
+{{- end }}
+
+** Please be patient while the chart is being deployed **
+
+MongoDB can be accessed on the following DNS name(s) and ports from within your cluster:
+
+{{- if eq .Values.mongodb.architecture "replicaset" }}
+{{ join "\n" $mongoList | nindent 4 }}
+{{- else }}
+
+    {{ $fullname }}.{{ $releaseNamespace }}.svc.{{ .Values.mongodb.clusterDomain }}
+
+{{- end }}
+
+{{- if .Values.mongodb.auth.enabled }}
+
+To get the root password run:
+
+    export MONGODB_ROOT_PASSWORD=$(kubectl get secret --namespace {{ template "mongodb.namespace" . }} {{ $fullname }} -o jsonpath="{.data.mongodb-root-password}" | base64 --decode)
+
+{{- end }}
+{{- if and .Values.mongodb.auth.username .Values.mongodb.auth.database .Values.mongodb.auth.password }}
+
+To get the password for "{{ .Values.mongodb.auth.username }}" run:
+
+    export MONGODB_PASSWORD=$(kubectl get secret --namespace {{ template "mongodb.namespace" . }} {{ $fullname }} -o jsonpath="{.data.mongodb-password}" | base64 --decode)
+
+{{- end }}
+
+To connect to your database, create a MongoDB client container:
+
+    kubectl run --namespace {{ template "mongodb.namespace" . }} {{ $fullname }}-client --rm --tty -i --restart='Never' --env="MONGODB_ROOT_PASSWORD=$MONGODB_ROOT_PASSWORD" --image {{ template "mongodb.image" . }} --command -- bash
+
+Then, run the following command:
+
+    {{- if eq .Values.mongodb.architecture "replicaset" }}
+    mongo admin --host "{{ join "," $mongoList }}" {{- if .Values.mongodb.auth.enabled }} --authenticationDatabase admin -u root -p $MONGODB_ROOT_PASSWORD{{- end }}
+    {{- else }}
+    mongo admin --host "{{ $fullname }}" {{- if .Values.mongodb.auth.enabled }} --authenticationDatabase admin -u root -p $MONGODB_ROOT_PASSWORD{{- end }}
+    {{- end }}
+
+{{- if and (eq .Values.mongodb.architecture "replicaset") .Values.mongodb.externalAccess.enabled }}
+
+To connect to your database nodes from outside, you need to add both primary and secondary nodes hostnames/IPs to your Mongo client. To obtain them, follow the instructions below:
+
+{{- if eq "NodePort" .Values.mongodb.externalAccess.service.type }}
+{{- if .Values.mongodb.externalAccess.service.domain }}
+
+    MongoDB nodes domain: Use your provided hostname to reach MongoDB nodes, {{ .Values.mongodb.externalAccess.service.domain }}
+
+{{- else }}
+
+    MongoDB nodes domain: you can reach MongoDB nodes on any of the K8s nodes external IPs.
+
+        kubectl get nodes -o wide
+
+{{- end }}
+
+    MongoDB nodes port: You will have a different node port for each MongoDB node. You can get the list of configured node ports using the command below:
+
+        echo "$(kubectl get svc --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ template "mongodb.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=mongodb,pod" -o jsonpath='{.items[*].spec.ports[0].nodePort}' | tr ' ' '\n')"
+
+{{- else if contains "LoadBalancer" .Values.mongodb.externalAccess.service.type }}
+
+  NOTE: It may take a few minutes for the LoadBalancer IPs to be available.
+        Watch the status with: 'kubectl get svc --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ template "mongodb.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=mongodb,pod" -w'
+
+    MongoDB nodes domain: You will have a different external IP for each MongoDB node. You can get the list of external IPs using the command below:
+
+        echo "$(kubectl get svc --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ template "mongodb.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=mongodb,pod" -o jsonpath='{.items[*].status.loadBalancer.ingress[0].ip}' | tr ' ' '\n')"
+
+    MongoDB nodes port: {{ .Values.mongodb.externalAccess.service.port }}
+
+{{- end }}
+
+{{- else if eq .Values.mongodb.architecture "standalone" }}
+
+To connect to your database from outside the cluster execute the following commands:
+
+{{- if contains "NodePort" .Values.mongodb.service.type }}
+
+    export NODE_IP=$(kubectl get nodes --namespace {{ template "mongodb.namespace" . }} -o jsonpath="{.items[0].status.addresses[0].address}")
+    export NODE_PORT=$(kubectl get --namespace {{ template "mongodb.namespace" . }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ $fullname }})
+    mongo --host $NODE_IP --port $NODE_PORT {{- if .Values.mongodb.auth.enabled }} --authenticationDatabase admin -p $MONGODB_ROOT_PASSWORD{{- end }}
+
+{{- else if contains "LoadBalancer" .Values.mongodb.service.type }}
+
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        Watch the status with: 'kubectl get svc --namespace {{ template "mongodb.namespace" . }} -w {{ $fullname }}'
+
+    export SERVICE_IP=$(kubectl get svc --namespace {{ template "mongodb.namespace" . }} {{ $fullname }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+    mongo --host $SERVICE_IP --port {{ $portNumber }} {{- if .Values.mongodb.auth.enabled }} --authenticationDatabase admin -p $MONGODB_ROOT_PASSWORD{{- end }}
+
+{{- else if contains "ClusterIP" .Values.mongodb.service.type }}
+
+    kubectl port-forward --namespace {{ template "mongodb.namespace" . }} svc/{{ $fullname }} {{ $portNumber }}:{{ $portNumber }} &
+    mongo --host 127.0.0.1 {{- if .Values.mongodb.auth.enabled }} --authenticationDatabase admin -p $MONGODB_ROOT_PASSWORD{{- end }}
+
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.mongodb.metrics.enabled }}
+
+To access the MongoDB Prometheus metrics, get the MongoDB Prometheus URL by running:
+
+    kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ $fullname }}-metrics {{ .Values.mongodb.metrics.service.port }}:{{ .Values.mongodb.metrics.service.port }} &
+    echo "Prometheus Metrics URL: http://127.0.0.1:{{ .Values.mongodb.metrics.service.port }}/metrics"
+
+Then, open the obtained URL in a browser.
+
+{{- end }}
+
+
+
+RabbitMQ can be accessed within the cluster on port {{ .Values.rabbitmq.service.nodePort }} at {{  .Values.rabbitmq.fullnameOverride }}.{{ .Release.Namespace }}.svc.{{ .Values.rabbitmq.clustering.k8s_domain }}
+
+To access for outside the cluster, perform the following steps:
+
+{{- if .Values.rabbitmq.ingress.enabled }}
+{{- if contains "NodePort" .Values.rabbitmq.service.type }}
+
+To Access the RabbitMQ AMQP port:
+
+1. Obtain the NodePort IP and ports:
+
+    export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+    export NODE_PORT_AMQP=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[1].nodePort}" services {{  .Values.rabbitmq.fullnameOverride }})
+    echo "URL : amqp://$NODE_IP:$NODE_PORT_AMQP/"
+
+{{- else if contains "LoadBalancer" .Values.rabbitmq.service.type }}
+
+To Access the RabbitMQ AMQP port:
+
+1. Obtain the LoadBalancer IP:
+
+NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+      Watch the status with: 'kubectl get svc --namespace {{ .Release.Namespace }} -w {{  .Values.rabbitmq.fullnameOverride }}'
+
+    export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{  .Values.rabbitmq.fullnameOverride }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+    echo "URL : amqp://$SERVICE_IP:{{ .Values.rabbitmq.service.port }}/"
+
+{{- else if contains "ClusterIP"  .Values.rabbitmq.service.type }}
+
+To Access the RabbitMQ AMQP port:
+
+1. Create a port-forward to the AMQP port:
+
+    kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{  .Values.rabbitmq.fullnameOverride }} {{ .Values.rabbitmq.service.port }}:{{ .Values.rabbitmq.service.port }} &
+    echo "URL : amqp://127.0.0.1:{{ .Values.rabbitmq.service.port }}/"
+
+{{- end }}
+
+2. Access RabbitMQ using using the obtained URL.
+
+To Access the RabbitMQ Management interface:
+
+1. Get the RabbitMQ Management URL and associate its hostname to your cluster external IP:
+
+   export CLUSTER_IP=$(minikube ip) # On Minikube. Use: `kubectl cluster-info` on others K8s clusters
+   echo "RabbitMQ Management: http{{ if .Values.rabbitmq.ingress.tls }}s{{ end }}://{{ .Values.rabbitmq.ingress.hostname }}/"
+   echo "$CLUSTER_IP  {{ .Values.rabbitmq.ingress.hostname }}" | sudo tee -a /etc/hosts
+
+2. Open a browser and access RabbitMQ Management using the obtained URL.
+
+{{- else }}
+{{- if contains "NodePort" .Values.rabbitmq.service.type }}
+
+Obtain the NodePort IP and ports:
+
+    export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+    export NODE_PORT_AMQP=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[1].nodePort}" services {{  .Values.rabbitmq.fullnameOverride }})
+    export NODE_PORT_STATS=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[3].nodePort}" services {{  .Values.rabbitmq.fullnameOverride }})
+
+To Access the RabbitMQ AMQP port:
+
+    echo "URL : amqp://$NODE_IP:$NODE_PORT_AMQP/"
+
+To Access the RabbitMQ Management interface:
+
+    echo "URL : http://$NODE_IP:$NODE_PORT_STATS/"
+
+{{- else if contains "LoadBalancer" .Values.rabbitmq.service.type }}
+
+Obtain the LoadBalancer IP:
+
+NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+      Watch the status with: 'kubectl get svc --namespace {{ .Release.Namespace }} -w {{  .Values.rabbitmq.fullnameOverride }}'
+
+    export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{  .Values.rabbitmq.fullnameOverride }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+
+To Access the RabbitMQ AMQP port:
+
+    echo "URL : amqp://$SERVICE_IP:{{ .Values.rabbitmq.service.port }}/"
+
+To Access the RabbitMQ Management interface:
+
+    echo "URL : http://$SERVICE_IP:{{ .Values.rabbitmq.service.managerPort }}/"
+
+{{- else if contains "ClusterIP"  .Values.rabbitmq.service.type }}
+
+To Access the RabbitMQ AMQP port:
+
+    echo "URL : amqp://127.0.0.1:{{ .Values.rabbitmq.service.port }}/"
+    kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{  .Values.rabbitmq.fullnameOverride }} {{ .Values.rabbitmq.service.port }}:{{ .Values.rabbitmq.service.port }}
+
+To Access the RabbitMQ Management interface:
+
+    echo "URL : http://127.0.0.1:{{ .Values.rabbitmq.service.managerPort }}/"
+    kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{  .Values.rabbitmq.fullnameOverride }} {{ .Values.rabbitmq.service.managerPort }}:{{ .Values.rabbitmq.service.managerPort }}
+
+{{- end }}
+{{- end }}
+
+{{- if .Values.rabbitmq.metrics.enabled }}
+
+To access the RabbitMQ Prometheus metrics, get the RabbitMQ Prometheus URL by running:
+
+    kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{  .Values.rabbitmq.fullnameOverride }} {{ .Values.rabbitmq.service.metricsPort }}:{{ .Values.rabbitmq.service.metricsPort }} &
+    echo "Prometheus Metrics URL: http://127.0.0.1:{{ .Values.rabbitmq.service.metricsPort }}/metrics"
+
+Then, open the obtained URL in a browser.
+
+{{- end }}

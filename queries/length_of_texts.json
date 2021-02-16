@@ -1,0 +1,30 @@
+{
+    "collection": "posts.posts",
+    "aggregate": [
+        {
+            "$unwind": "$user"
+        },
+        {
+            "$group": {
+                "_id": "$user",
+                "totalAmount": {
+                    "$sum": {
+                        "$strLenCP": "$text"
+                    }
+                }
+            }
+        },
+        {
+            "$sort": [
+                {
+                    "name": "totalAmount",
+                    "direction": -1
+                },
+                {
+                    "name": "_id",
+                    "direction": -1
+                }
+            ]
+        }
+    ]
+}

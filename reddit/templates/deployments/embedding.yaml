@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "embedding.fullname" . }}
+  labels:
+    {{- include "embedding.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.embedding.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "embedding.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.embedding.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "embedding.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.embedding.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: embedding-worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: [celery, worker, --app=celery_tasks.vectorization.tasks.app, --queue=queueB, -c 10, --loglevel=INFO, --events]
+          envFrom:
+          - configMapRef:
+              name: scrapper-config
+          resources:
+{{- toYaml .Values.embedding.resources | nindent 12 }}
+    {{- with .Values.embedding.nodeSelector }}
+      nodeSelector:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.embedding.affinity }}
+      affinity:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.embedding.tolerations }}
+      tolerations:
+{{- toYaml . | nindent 8 }}
+    {{- end }}

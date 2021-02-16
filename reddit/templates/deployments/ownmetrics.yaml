@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ownmetrics.fullname" . }}
+  labels:
+    {{- include "ownmetrics.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.ownmetrics.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ownmetrics.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.ownmetrics.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "ownmetrics.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.ownmetrics.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: metrics
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: [flask, run,  --host=0.0.0.0, --port={{ .Values.ownmetrics.service.port }}]
+          envFrom:
+          - configMapRef:
+              name: scrapper-config
+          ports:
+            - name: metrics
+              containerPort: {{.Values.ownmetrics.service.port}}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+          resources:
+{{- toYaml .Values.ownmetrics.resources | nindent 12 }}
+    {{- with .Values.ownmetrics.nodeSelector }}
+      nodeSelector:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.ownmetrics.affinity }}
+      affinity:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.ownmetrics.tolerations }}
+      tolerations:
+{{- toYaml . | nindent 8 }}
+    {{- end }}

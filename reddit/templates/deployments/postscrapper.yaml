@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "postscrapper.fullname" . }}
+  labels:
+    {{- include "postscrapper.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.postscrapper.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "postscrapper.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.postscrapper.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "postscrapper.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.postscrapper.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: post-scrapper
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: [celery, worker, --app=celery_tasks.posts.tasks.app, --queue=queueA, -c 10, --loglevel=INFO, --events]
+          envFrom:
+          - configMapRef:
+              name: scrapper-config
+          resources:
+{{- toYaml .Values.postscrapper.resources | nindent 12 }}
+    {{- with .Values.postscrapper.nodeSelector }}
+      nodeSelector:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.postscrapper.affinity }}
+      affinity:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.postscrapper.tolerations }}
+      tolerations:
+{{- toYaml . | nindent 8 }}
+    {{- end }}

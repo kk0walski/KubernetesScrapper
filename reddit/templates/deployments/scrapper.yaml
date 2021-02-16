@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "scrapper.fullname" . }}
+  labels:
+    {{- include "scrapper.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.scrapper.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "scrapper.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.scrapper.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "scrapper.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: scrapper
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: [celery, worker, --app=celery_tasks.posts.tasks.app, -c 10, --loglevel=INFO, --events]
+          envFrom:
+          - configMapRef:
+              name: scrapper-config
+          resources:
+{{- toYaml .Values.scrapper.resources | nindent 12 }}
+    {{- with .Values.scrapper.nodeSelector }}
+      nodeSelector:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.scrapper.affinity }}
+      affinity:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.scrapper.tolerations }}
+      tolerations:
+{{- toYaml . | nindent 8 }}
+    {{- end }}

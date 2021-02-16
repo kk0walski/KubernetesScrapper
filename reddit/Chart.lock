@@ -1,0 +1,18 @@
+dependencies:
+- name: rabbitmq
+  repository: https://charts.bitnami.com/bitnami
+  version: 8.6.1
+- name: prometheus
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 13.0.2
+- name: grafana
+  repository: https://charts.bitnami.com/bitnami
+  version: 4.2.4
+- name: mongodb
+  repository: https://charts.bitnami.com/bitnami
+  version: 10.3.4
+- name: redash
+  repository: https://getredash.github.io/contrib-helm-chart
+  version: 2.3.0
+digest: sha256:85e8b4a3ece47b2eca8e763b8e49971877e4d0c16310dd0c24797ed89c42f6cc
+generated: "2021-01-05T23:34:56.601894797+01:00"

@@ -1,0 +1,486 @@
+# Default values for reddit.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+schedule: 100
+
+image:
+  repository: rolnik25/scrapper
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+
+exporter:
+  repository:  ovalmoney/celery-exporter
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+
+prometheus:
+  persistentVolume:
+    storageClass: "gp2"
+  nodeSelector:
+    node.role.kubernetes.io/role: worker2
+
+grafana:
+  persistentVolume:
+    storageClass: "gp2"
+  nodeSelector:
+    node.role.kubernetes.io/role: worker2
+  admin:
+    password: password
+
+redash:
+  nodeSelector:
+    node.role.kubernetes.io/role: worker2
+
+redash:
+  redash:
+    cookieSecret: xJkFZZlIfRxweAmJsEk+Hq4yxkx8Y79O4bkk4u0SUq8=
+    secretKey: KyD5LSbLC4myrJY2DuI0uLjmhaeXIcHaR3WeOtKWY+g=
+  postgresql:
+    postgresqlPassword: Iucl56MJMdmO9XdLorQCwrHZeioNXrFXoxZ1M6JPfxo=
+
+rabbitmq:
+  fullnameOverride: my-rabbitmq
+  persistence:
+    storageClass: "gp2"
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.role.kubernetes.io/role
+            operator: In
+            values:
+            - worker1
+            - worker2
+            - worker3
+  service:
+    port: "5672"
+  metrics:
+    enabled: true
+  auth:
+    username: user
+    password: password
+    erlangCookie: cookieSecret
+
+mongodb:
+  persistentVolume:
+    storageClass: "gp2"
+  fullnameOverride: database
+  clusterDomain: cluster.local
+  service:
+    port: 27017
+  metrics:
+    enabled: true
+    service:
+      port: 9216
+  auth:
+    database: reddit_database
+    password: password
+    username: admin
+    rootPassword: adminPassword
+  nodeSelector:
+    node.role.kubernetes.io/role: worker2
+  resources: {}
+
+reddit:
+  id: ""
+  secret: ""
+  agent: rolnk25
+   
+imagePullSecrets: []
+podSecurityContext: {}
+  # fsGroup: 2000
+
+prometheus:
+  persistentVolume:
+    storageClass: "gp2"
+  extraScrapeConfigs: |
+    - job_name: 'celery-exporter'
+      metrics_path: /
+      static_configs:
+      - targets: 
+        - celery-metrics.default.svc:9540
+
+    - job_name: 'celery'
+      metrics_path: /metrics
+      static_configs:
+      - targets: 
+        - own-metrics.default.svc:5140
+
+    - job_name: 'queue'
+      metrics_path: /metrics
+      static_configs:
+      - targets: 
+        - my-rabbitmq.default.svc:9419
+
+    - job_name: 'database'
+      metrics_path: /metrics
+      static_configs:
+      - targets: 
+        - database-metrics.default.svc:9216
+
+serviceAccounts:
+  scheduler:
+    create: true
+    name:
+    annotations: {}
+  scrapper:
+    create: true
+    name:
+    annotations: {}
+  postscrapper:
+    create: true
+    name:
+    annotations: {}
+  vectorizer:
+    create: true
+    name:
+    annotations: {}
+
+scheduler:
+  name: scheduler
+  replicaCount: 1
+  podAnnotations: {}
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  ingress:
+    enabled: false
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: chart-example.local
+        paths: []
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  nodeSelector:
+    node.role.kubernetes.io/role: worker1
+
+  tolerations: []
+
+  affinity: {}
+
+scrapper:
+  name: scrapper
+  replicaCount: 1
+  podAnnotations: {}
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  ingress:
+    enabled: false
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: chart-example.local
+        paths: []
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  nodeSelector:
+    node.role.kubernetes.io/role: worker1
+
+  tolerations: []
+
+  affinity: {}
+
+postscrapper:
+  name: postscrapper
+  replicaCount: 1
+  podAnnotations: {}
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  ingress:
+    enabled: false
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: chart-example.local
+        paths: []
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  nodeSelector:
+    node.role.kubernetes.io/role: worker1
+
+  tolerations: []
+
+  affinity: {}
+
+embedding:
+  name: embedding
+  replicaCount: 1
+  podAnnotations: {}
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  ingress:
+    enabled: false
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: chart-example.local
+        paths: []
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  nodeSelector:
+    node.role.kubernetes.io/role: worker3
+
+  tolerations: []
+
+  affinity: {}
+
+ownmetrics:
+  fullnameOverride: own-metrics
+  name: ownmetrics
+  replicaCount: 1
+  podAnnotations: {}
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  service:
+    type: ClusterIP
+    port: 5140
+
+  ingress:
+    enabled: false
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: chart-example.local
+        paths: []
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  nodeSelector:
+    node.role.kubernetes.io/role: worker2
+
+  tolerations: []
+
+  affinity: {}
+
+celerymetrics:
+  fullnameOverride: celery-metrics
+  name: celerymetrics
+  replicaCount: 1
+  podAnnotations: {}
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  service:
+    type: ClusterIP
+    port: 9540
+
+  ingress:
+    enabled: false
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: chart-example.local
+        paths: []
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  nodeSelector:
+    node.role.kubernetes.io/role: worker2
+
+  tolerations: []
+
+  affinity: {}
+
+databaseworker:
+  name: databaseworker
+  replicaCount: 1
+  podAnnotations: {}
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  service:
+    type: ClusterIP
+    port: 9540
+
+  ingress:
+    enabled: false
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: chart-example.local
+        paths: []
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+
+  nodeSelector:
+    node.role.kubernetes.io/role: worker2
+
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  tolerations: []
+
+  affinity: {}

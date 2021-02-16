@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scrapper-config
+data:
+  CELERY_BROKER_URL: "{{ include "celery.exporter.url" . }}"
+  CELERY_RESULT_BACKEND: "rpc://"
+  MONGO_ADDRESS: "{{ include "database.hostname" . }}"
+  MONGO_INITDB_DATABASE: "{{ .Values.mongodb.auth.database }}"
+  MONGO_INITDB_ROOT_USERNAME: "{{ .Values.mongodb.auth.username }}"
+  MONGO_INITDB_ROOT_PASSWORD: "{{ .Values.mongodb.auth.password }}"
+  MONGO_PORT: "{{ .Values.mongodb.service.port }}"
+  REDDIT_ID: "{{ .Values.reddit.id }}"
+  REDDIT_SECRET: "{{ .Values.reddit.secret }}"
+  REDDIT_AGENT: "{{ .Values.reddit.agent }}"
+  FLASK_APP: runner
+  NEWSPAPER_SCHEDULE: "{{ .Values.schedule }}"

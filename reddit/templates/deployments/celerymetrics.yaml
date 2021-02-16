@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "celerymetrics.fullname" . }}
+  labels:
+    {{- include "celerymetrics.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "celerymetrics.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "celerymetrics.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: celery-exporter
+          image: "{{ .Values.exporter.repository }}:{{ .Values.exporter.tag }}"
+          envFrom:
+          - configMapRef:
+              name: scrapper-config
+          ports:
+            - name: celery-exporter
+              containerPort: {{.Values.celerymetrics.service.port}}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: celery-exporter
+          readinessProbe:
+            httpGet:
+              path: /
+              port: celery-exporter
+          resources:
+{{- toYaml .Values.celerymetrics.resources | nindent 12 }}
+    {{- with .Values.celerymetrics.nodeSelector }}
+      nodeSelector:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.celerymetrics.affinity }}
+      affinity:
+{{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.celerymetrics.tolerations }}
+      tolerations:
+{{- toYaml . | nindent 8 }}
+    {{- end }}

@@ -1,0 +1,7 @@
+__pycache__
+init-mongo.js
+celerybeat-schedule
+mongo-volume/
+pqdata/
+app/celerybeat.pid
+.tox
